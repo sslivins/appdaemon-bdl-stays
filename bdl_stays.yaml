@@ -1,0 +1,57 @@
+bdl_stays:
+  module: bdl_stays
+  class: BdlStays
+  log: bdl_stays_log
+
+  timezone: America/Vancouver
+
+  # Shared secret callers send as the X-API-Key header.
+  api_key: !secret bdl_stays_api_key
+
+  # Local Calendar "BDL Stays": one event per stay, summary = guest name,
+  # description may hold "pin: 123456" plus notes.
+  calendar_entity: calendar.bdl_stays
+  poll_interval_s: 300
+
+  # HA REST access: gives stable event uids (calendar.get_events does not
+  # return them) and publishes the sensors. Same token as bdl_modes. Remove
+  # both keys to fall back to AppDaemon's own connection.
+  ha_url: http://192.168.10.212:8123
+  ha_token: !secret bdl_modes_ha_token
+
+  # UniFi Access developer API. Leave access_token out for "no-access" mode.
+  access_host: https://192.168.10.1:12445
+  access_token: !secret bdl_stays_access_token
+  access_verify_ssl: false          # Access uses a self-signed cert
+  # Doors guests may open: Access door names (as shown in HA, e.g. "Front
+  # Door", "Garage Side Door", "Ski Room") or ids (cmd "doors" lists them).
+  door_ids: []
+  door_group_ids: []
+  door_names:
+    - Front Door
+
+  # bdl_modes (same AppDaemon). Calls are only made when modes_enabled.
+  bdl_modes_url: http://127.0.0.1:5050/api/appdaemon/bdl_modes
+  bdl_modes_api_key: !secret bdl_modes_api_key
+  modes_enabled: false
+
+  # Failure notifications (one per stay per failure type).
+  # notify_service: notify.mobile_app_stefan   # local HA notify, optional
+  remote_notify:
+    - url: http://192.168.1.192:8123
+      token: !secret mi_ha_notify_token
+      service: notify.mobile_app_stefan
+
+  engine:
+    arrival_time: "16:00"           # all-day events
+    checkout_time: "11:00"
+    horizon_days: 60
+    create_days_before: 14          # create the Access visitor this early
+    early_access_h: 2               # PIN valid from arrival - 2 h
+    late_access_h: 1                # ... to checkout + 1 h
+    cleanup_delay_h: 1              # then the visitor is deleted 1 h later
+    pin_length: 6
+    pin_blocklist: []               # owner/staff codes, never handed out
+    preheat_horizon_h: 48
+    vacation_delay_h: 1
+    back_to_back_h: 24

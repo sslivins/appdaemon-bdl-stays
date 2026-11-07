@@ -1,0 +1,98 @@
+# Lovelace view for the BDL dashboard: guest stays, door PINs and the
+# calendar they come from. Paste under `views:` of the dashboard (raw
+# configuration editor) or add as a new view in YAML mode.
+#
+# Entities: calendar.bdl_stays (Local Calendar "BDL Stays"),
+# sensor.bdl_stay_current, sensor.bdl_stay_next (published by AppDaemon
+# app bdl_stays; see README for attributes).
+title: Stays
+path: stays
+icon: mdi:calendar-account
+type: sections
+max_columns: 2
+sections:
+  - type: grid
+    cards:
+      - type: heading
+        heading: Current stay
+        icon: mdi:home-account
+      - type: markdown
+        content: |-
+          {% set s = 'sensor.bdl_stay_current' %}
+          {% if states(s) in ['none', 'unknown', 'unavailable'] %}
+          No guests right now.
+          {% else %}
+          {% set f = '%a %b %-d, %-I:%M %p' %}
+          ## {{ state_attr(s, 'guest') }}
+
+          - **Arrival:** {{ as_timestamp(state_attr(s, 'arrival')) | timestamp_custom(f) }}
+          - **Checkout:** {{ as_timestamp(state_attr(s, 'checkout')) | timestamp_custom(f) }}
+          - **Door PIN:** {{ state_attr(s, 'pin') or '—' }} ({{ state_attr(s, 'pin_source') }})
+          - **Door access:** {{ state_attr(s, 'access_status') }}, {{ as_timestamp(state_attr(s, 'access_start')) | timestamp_custom(f) }} → {{ as_timestamp(state_attr(s, 'access_end')) | timestamp_custom(f) }}
+          {%- if state_attr(s, 'notes') %}
+          - **Notes:** {{ state_attr(s, 'notes') }}
+          {%- endif %}
+          {%- if state_attr(s, 'last_error') %}
+
+          ⚠️ {{ state_attr(s, 'last_error') }}
+          {%- endif %}
+          {% endif %}
+      - type: heading
+        heading: Next stay
+        icon: mdi:calendar-account
+      - type: markdown
+        content: |-
+          {% set s = 'sensor.bdl_stay_next' %}
+          {% if states(s) in ['none', 'unknown', 'unavailable'] %}
+          No upcoming stays.
+          {% else %}
+          {% set f = '%a %b %-d, %-I:%M %p' %}
+          ## {{ state_attr(s, 'guest') }}
+
+          - **Arrival:** {{ as_timestamp(state_attr(s, 'arrival')) | timestamp_custom(f) }} (in {{ time_until(as_datetime(state_attr(s, 'arrival'))) }})
+          - **Checkout:** {{ as_timestamp(state_attr(s, 'checkout')) | timestamp_custom(f) }}
+          - **Door PIN:** {{ state_attr(s, 'pin') or '—' }} ({{ state_attr(s, 'pin_source') }})
+          - **Door access:** {{ state_attr(s, 'access_status') }}, {{ as_timestamp(state_attr(s, 'access_start')) | timestamp_custom(f) }} → {{ as_timestamp(state_attr(s, 'access_end')) | timestamp_custom(f) }}
+          {%- if state_attr(s, 'notes') %}
+          - **Notes:** {{ state_attr(s, 'notes') }}
+          {%- endif %}
+          {%- if state_attr(s, 'last_error') %}
+
+          ⚠️ {{ state_attr(s, 'last_error') }}
+          {%- endif %}
+          {% endif %}
+      - type: entities
+        title: Stay sync
+        show_header_toggle: false
+        entities:
+          - entity: sensor.bdl_stay_current
+            name: Current guest
+          - entity: sensor.bdl_stay_next
+            name: Next guest
+          - type: attribute
+            entity: sensor.bdl_stay_next
+            attribute: access_mode
+            name: UniFi Access
+            icon: mdi:door-closed-lock
+          - type: attribute
+            entity: sensor.bdl_stay_next
+            attribute: modes_enabled
+            name: Heat automation (bdl_modes)
+            icon: mdi:radiator
+  - type: grid
+    cards:
+      - type: heading
+        heading: Calendar
+        icon: mdi:calendar
+      - type: markdown
+        content: >-
+          Add a stay as an event in **BDL Stays**: title = guest name,
+          all-day events arrive 4 PM / leave 11 AM. Optional description
+          line `pin: 123456` (4–8 digits) sets the guest's own door PIN;
+          other lines are notes.
+      - type: calendar
+        initial_view: dayGridMonth
+        entities:
+          - calendar.bdl_stays
+        grid_options:
+          columns: full
