@@ -20,6 +20,10 @@ app, so restarts are idempotent.
 
 ## Calendar conventions
 
+The easiest way to add a stay is the **New stay** form on the dashboard's
+Stays tab (guest, arrival, checkout, optional PIN and notes); it writes an
+event following these conventions.
+
 | Field | Meaning |
 |---|---|
 | Summary | Guest name, e.g. `Henderson family` (becomes the Access visitor name) |
@@ -170,6 +174,11 @@ bdl_modes.
 4. Home Assistant: Settings › Devices & services › Add integration ›
    **Local Calendar**, name it **BDL Stays** (→ `calendar.bdl_stays`).
    Add `install/dashboard_tab.yaml` as a view of the BDL dashboard.
+   For its **New stay** form, create the helpers listed at the top of
+   `install/create_stay_script.yaml` (four input_text/input_datetime plus
+   the `binary_sensor.bdl_new_stay_ready` template) and add that file as
+   script `bdl_create_stay`. The form creates a timed event, writes the
+   `pin:` line itself and clears the fields afterwards.
 5. UniFi Access (≥ 1.9.1): Settings › General › Advanced › API Token ›
    create a token with **Visitor** (view + edit) and **Space** (view)
    permissions. Check the port (`12445`) in `access_host`.

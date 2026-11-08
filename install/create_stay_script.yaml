@@ -1,0 +1,73 @@
+# HA script behind the "New stay" form on the Stays dashboard tab.
+# Reads the form helpers, validates them and adds a timed event to
+# calendar.bdl_stays (writing the `pin:` line for you), then clears the form.
+#
+# Helpers (Settings -> Helpers, or WS input_text/create, input_datetime/create):
+#   input_text.bdl_new_stay_guest      max 100
+#   input_text.bdl_new_stay_pin        max 8, pattern ^(\d{4,8})?$  (blank = auto PIN)
+#   input_text.bdl_new_stay_notes      max 255
+#   input_datetime.bdl_new_stay_arrival   date + time
+#   input_datetime.bdl_new_stay_checkout  date + time
+#   binary_sensor.bdl_new_stay_ready   template helper: guest set, PIN blank or
+#       4-8 digits, checkout > arrival (gates the dashboard's Create button)
+#
+# Install: Settings -> Automations & scenes -> Scripts -> new -> Edit in YAML,
+# with script id `bdl_create_stay`.
+alias: Create guest stay
+icon: mdi:calendar-plus
+mode: single
+sequence:
+  - variables:
+      guest: "{{ states('input_text.bdl_new_stay_guest') | trim }}"
+      pin: "{{ states('input_text.bdl_new_stay_pin') | trim }}"
+      notes: "{{ states('input_text.bdl_new_stay_notes') | trim }}"
+      arrival: "{{ states('input_datetime.bdl_new_stay_arrival') }}"
+      checkout: "{{ states('input_datetime.bdl_new_stay_checkout') }}"
+  - if:
+      - condition: template
+        value_template: "{{ guest in ['', 'unknown', 'unavailable'] }}"
+    then:
+      - stop: Enter the guest name.
+        error: true
+  - if:
+      - condition: template
+        value_template: "{{ pin != '' and not (pin is match('^\\d{4,8}$')) }}"
+    then:
+      - stop: The PIN must be 4 to 8 digits, or blank for an automatic one.
+        error: true
+  - if:
+      - condition: template
+        value_template: >-
+          {{ as_datetime(arrival) is none or as_datetime(checkout) is none
+             or as_datetime(checkout) <= as_datetime(arrival) }}
+    then:
+      - stop: Checkout must be after arrival.
+        error: true
+  - action: calendar.create_event
+    target:
+      entity_id: calendar.bdl_stays
+    data:
+      summary: "{{ guest }}"
+      start_date_time: "{{ arrival }}"
+      end_date_time: "{{ checkout }}"
+      description: >-
+        {{ ((['pin: ' ~ pin] if pin else []) + ([notes] if notes else []))
+           | join('\n') }}
+  - action: input_text.set_value
+    target:
+      entity_id:
+        - input_text.bdl_new_stay_guest
+        - input_text.bdl_new_stay_pin
+        - input_text.bdl_new_stay_notes
+    data:
+      value: ""
+  - action: input_datetime.set_datetime
+    target:
+      entity_id: input_datetime.bdl_new_stay_arrival
+    data:
+      datetime: "{{ (today_at('16:00') + timedelta(days=1)).strftime('%Y-%m-%d %H:%M:00') }}"
+  - action: input_datetime.set_datetime
+    target:
+      entity_id: input_datetime.bdl_new_stay_checkout
+    data:
+      datetime: "{{ (today_at('11:00') + timedelta(days=3)).strftime('%Y-%m-%d %H:%M:00') }}"
