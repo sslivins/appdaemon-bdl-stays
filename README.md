@@ -103,8 +103,14 @@ logs once per decision `modes disabled: would …`.
 - **Vacation**: at checkout + `vacation_delay_h` (1 h) send `vacation`,
   unless another stay arrives within `back_to_back_h` (24 h) of checkout.
   Skipped if more than 12 h late (e.g. AppDaemon was down).
-- Removing a stay after its preheat was sent only notifies
-  (`preheat_orphan`); cancel/vacation is left to a human.
+- Removing a stay after its preheat was sent withdraws it: `cancel` if no
+  group has run yet, otherwise `vacation` to undo the ramp (just `cancel`
+  if another stay is in the lodge). Only the bdl_modes operation this app
+  started is touched (its op id is recorded); a preheat it merely adopted
+  is left alone. If withdrawing fails, `preheat_orphan` is notified.
+- Manual changes win: if the app's preheat was cancelled, finished or
+  replaced in bdl_modes (e.g. from the Preheat tab), a later change to the
+  stay's arrival is not pushed (result `overridden`).
 
 ## Sensors
 
