@@ -306,7 +306,7 @@ class AccessLifecycleTests(Base):
         self.assertEqual(self.stay()["access_status"], "scheduled")
         self.assertEqual(self.access.calls, [])
         pin = self.e.pin_of(self.stay())[0]
-        self.assertRegex(pin, r"^\d{6}$")              # known ahead of time
+        self.assertRegex(pin, r"^\d{4}$")              # known ahead of time
         self.sync(self.events(), at=ts(12, 6, 16))     # 14 days out
         self.assertEqual(self.stay()["access_status"], "active")
         self.assertEqual(self.access.calls, ["find", "create", "pin"])

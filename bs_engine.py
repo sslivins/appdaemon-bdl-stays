@@ -34,7 +34,7 @@ DEFAULTS = {
     "early_access_h": 2.0,          # PIN works from arrival - early
     "late_access_h": 1.0,           # ... until checkout + late
     "cleanup_delay_h": 1.0,         # delete visitor at access end + this
-    "pin_length": 6,
+    "pin_length": 4,
     "pin_blocklist": [],            # e.g. owner / staff codes
     "preheat_horizon_h": 48.0,
     "vacation_delay_h": 1.0,
@@ -90,7 +90,7 @@ def manual_pin_error(pin, blocklist=()):
     return None
 
 
-def generate_pin(length=6, blocklist=(), avoid=(), rng=None):
+def generate_pin(length=4, blocklist=(), avoid=(), rng=None):
     rng = rng or secrets.SystemRandom()
     bad = {str(b) for b in blocklist} | {str(a) for a in avoid if a}
     for _ in range(1000):

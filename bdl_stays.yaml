@@ -9,7 +9,7 @@ bdl_stays:
   api_key: !secret bdl_stays_api_key
 
   # Local Calendar "BDL Stays": one event per stay, summary = guest name,
-  # description may hold "pin: 123456" plus notes.
+  # description may hold "pin: 4821" plus notes.
   calendar_entity: calendar.bdl_stays
   poll_interval_s: 300
 
@@ -51,7 +51,7 @@ bdl_stays:
     early_access_h: 2               # PIN valid from arrival - 2 h
     late_access_h: 1                # ... to checkout + 1 h
     cleanup_delay_h: 1              # then the visitor is deleted 1 h later
-    pin_length: 6
+    pin_length: 4
     pin_blocklist: []               # owner/staff codes, never handed out
     preheat_horizon_h: 48
     vacation_delay_h: 1

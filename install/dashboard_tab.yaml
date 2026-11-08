@@ -88,7 +88,7 @@ sections:
         content: >-
           Add a stay as an event in **BDL Stays**: title = guest name,
           all-day events arrive 4 PM / leave 11 AM. Optional description
-          line `pin: 123456` (4–8 digits) sets the guest's own door PIN;
+          line `pin: 4821` (4–8 digits) sets the guest's own door PIN;
           other lines are notes.
       - type: calendar
         initial_view: dayGridMonth

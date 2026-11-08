@@ -24,7 +24,7 @@ app, so restarts are idempotent.
 |---|---|
 | Summary | Guest name, e.g. `Henderson family` (becomes the Access visitor name) |
 | Start / end | Arrival / checkout. **All-day** events arrive at `arrival_time` (16:00) on the first day and leave at `checkout_time` (11:00) on the last day shown in the calendar. A single-day all-day event is one night. |
-| Description | Optional line `pin: 123456` (also `PIN=1234`, `Door PIN: 12-34`): the guest's own PIN, 4–8 digits. Every other line is a note. |
+| Description | Optional line `pin: 4821` (also `PIN=1234`, `Door PIN: 12-34`): the guest's own PIN, 4–8 digits. Every other line is a note. |
 
 Times are America/Vancouver (the app uses the offsets HA returns; no fixed
 UTC offset is assumed). The stay id is the calendar event `uid` (read via
@@ -49,8 +49,8 @@ ensures one Access visitor:
   resolved through `GET /doors`; cmd `doors` lists what exists);
 - PIN, by precedence: endpoint override (`set_pin` / `regenerate_pin`) >
   calendar `pin:` > an auto PIN generated once and persisted. Auto PINs are
-  `pin_length` (6) random digits, never trivial (`123456`, `111111`,
-  `121212`, …), never in `pin_blocklist`, never equal to another stay's PIN.
+  `pin_length` (4) random digits, never trivial (`1234`, `1111`,
+  `1212`, …), never in `pin_blocklist`, never equal to another stay's PIN.
   A malformed or blocklisted calendar PIN falls back to an auto PIN and
   sends a `bad_pin` notification. Changing the calendar PIN drops any
   override.
