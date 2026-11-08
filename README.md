@@ -173,7 +173,7 @@ bdl_modes.
 5. UniFi Access (≥ 1.9.1): Settings › General › Advanced › API Token ›
    create a token with **Visitor** (view + edit) and **Space** (view)
    permissions. Check the port (`12445`) in `access_host`.
-6. Pick the guest doors: keep `door_names: [Front Door]` or call cmd
+6. Pick the guest doors: keep `door_names: [Front Door, Ski Room]` (the two doors with PIN pads) or call cmd
    `doors` and put ids into `door_ids` / `door_group_ids`. Set
    `pin_blocklist` to owner/staff codes and `pin_length` to Access's
    configured PIN length.

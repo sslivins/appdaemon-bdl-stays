@@ -29,6 +29,7 @@ bdl_stays:
   door_group_ids: []
   door_names:
     - Front Door
+    - Ski Room
 
   # bdl_modes (same AppDaemon). Calls are only made when modes_enabled.
   bdl_modes_url: http://127.0.0.1:5050/api/appdaemon/bdl_modes
