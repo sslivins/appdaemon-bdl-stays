@@ -344,6 +344,25 @@ class AccessLifecycleTests(Base):
         self.assertEqual(v["pin"], "2468")
         self.assertEqual(self.e.pin_of(self.stay()), ("2468", "manual"))
 
+    def test_owner_visit_gets_no_visitor_or_pin(self):
+        self.sync(self.events(desc="type: owner\npin: 2468\nbring skis"),
+                  at=ts(12, 10))
+        r = self.stay()
+        self.assertEqual(self.access.calls, [])
+        self.assertEqual(r["access_status"], "owner")
+        self.assertEqual(self.e.pin_of(r), (None, "auto"))
+        self.assertEqual(r["notes"], "bring skis")
+        self.assertTrue(self.e.stay_view(r)["owner"])
+        with self.assertRaises(ValueError):
+            self.e.set_pin(r["id"], "1357")
+
+    def test_guest_stay_switched_to_owner_drops_visitor(self):
+        self.sync(self.events(), at=ts(12, 10))
+        self.assertIn("v1", self.access.visitors)
+        self.sync(self.events(desc="Type: Owner"))
+        self.assertNotIn("v1", self.access.visitors)
+        self.assertEqual(self.stay()["access_status"], "owner")
+
     def test_removed_event_deletes_after_confirmation(self):
         self.sync(self.events(), at=ts(12, 10))
         self.sync([])

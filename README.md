@@ -28,7 +28,7 @@ event following these conventions.
 |---|---|
 | Summary | Guest name, e.g. `Henderson family` (becomes the Access visitor name) |
 | Start / end | Arrival / checkout. **All-day** events arrive at `arrival_time` (16:00) on the first day and leave at `checkout_time` (11:00) on the last day shown in the calendar. A single-day all-day event is one night. |
-| Description | Optional line `pin: 4821` (also `PIN=1234`, `Door PIN: 12-34`): the guest's own PIN, 4–8 digits. Every other line is a note. |
+| Description | Optional line `pin: 4821` (also `PIN=1234`, `Door PIN: 12-34`): the guest's own PIN, 4–8 digits. Optional line `type: owner` marks an owner visit: no door PIN or Access visitor (any `pin:` line is ignored), preheat still runs, and the hub signs itself in. Every other line is a note. |
 
 Times are America/Vancouver (the app uses the offsets HA returns; no fixed
 UTC offset is assumed). The stay id is the calendar event `uid` (read via
@@ -127,7 +127,8 @@ and show a welcome card):
 | `all_day` | `true` | |
 | `pin` | `482913` | |
 | `pin_source` | `manual` / `auto` | |
-| `access_status` | `scheduled` / `active` / `expired` / `removed` / `error` / `disabled` | |
+| `owner` | `false` | `true` for owner visits (`type: owner`) |
+| `access_status` | `scheduled` / `active` / `expired` / `removed` / `error` / `disabled` / `owner` | `owner`: no PIN by design |
 | `access_start` / `access_end` | ISO 8601 | PIN validity window |
 | `notes` | `Two dogs` | description minus the PIN line |
 | `last_error` | `null` | |
