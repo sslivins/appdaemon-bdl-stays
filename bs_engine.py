@@ -49,6 +49,7 @@ H = 3600.0
 FINAL_OPS = ("done", "failed", "cancelled", "superseded")
 PIN_RE = re.compile(
     r"^\s*(?:door\s*)?pin(?:\s*code)?\b\s*[:=#]?\s*(.*?)\s*$", re.I)
+TYPE_RE = re.compile(r"^\s*(?:stay\s*)?type\s*[:=]\s*(guest|owner)\s*$", re.I)
 
 
 class ModesError(Exception):
@@ -129,6 +130,8 @@ def parse_description(text):
     """-> (pin or None, pin_error or None, notes)."""
     pin, err, notes = None, None, []
     for line in str(text or "").splitlines():
+        if TYPE_RE.match(line):
+            continue
         m = PIN_RE.match(line)
         if m and pin is None and err is None:
             raw = re.sub(r"[\s-]", "", m.group(1))
@@ -137,6 +140,15 @@ def parse_description(text):
             continue
         notes.append(line)
     return pin, err, "\n".join(notes).strip()
+
+
+def is_owner_visit(text):
+    """A ``type: owner`` line marks the owners' own visit."""
+    for line in str(text or "").splitlines():
+        m = TYPE_RE.match(line)
+        if m:
+            return m.group(1).lower() == "owner"
+    return False
 
 
 def stay_id(ev, summary, start_raw):
@@ -174,13 +186,17 @@ def parse_event(ev, tz, cfg=None):
     if checkout <= arrival:
         raise ValueError("checkout is not after arrival")
     pin, pin_err, notes = parse_description(ev.get("description"))
+    owner = is_owner_visit(ev.get("description"))
+    if owner:
+        # Owners use their own codes: no visitor, so no PIN to manage.
+        pin, pin_err = None, None
     if pin and pin in {str(b) for b in c["pin_blocklist"]}:
         pin, pin_err = None, "PIN is on the blocklist"
     sid, source = stay_id(ev, summary, ev.get("start"))
     return {"id": sid, "id_source": source, "guest": summary,
             "arrival": arrival.timestamp(), "checkout": checkout.timestamp(),
             "all_day": all_day, "notes": notes, "calendar_pin": pin,
-            "calendar_pin_error": pin_err}
+            "calendar_pin_error": pin_err, "owner": owner}
 
 
 # ------------------------------------------------------------------ store
@@ -418,7 +434,9 @@ class Engine:
                            % s["calendar_pin_error"])
             else:
                 self._ok(r, "bad_pin")
-            if not self.pin_of(r)[0]:
+            if s["owner"]:
+                r["auto_pin"], r["pin_override"] = None, None
+            elif not self.pin_of(r)[0]:
                 r["auto_pin"] = self._new_auto_pin(r)
         need = int(self.cfg["removal_confirmations"])
         for r in missing:
@@ -444,7 +462,7 @@ class Engine:
             return
         access_end = r["checkout"] + self.cfg["late_access_h"] * H
         try:
-            if r.get("removed") or now >= access_end + \
+            if r.get("removed") or r.get("owner") or now >= access_end + \
                     self.cfg["cleanup_delay_h"] * H:
                 if r.get("visitor_id"):
                     self.access.delete_visitor(r["visitor_id"])
@@ -452,7 +470,7 @@ class Engine:
                     r["visitor_id"], r["synced"], r["synced_pin"] = \
                         None, None, None
                 r["access_status"] = "removed" if r.get("removed") \
-                    else "expired"
+                    else "owner" if r.get("owner") else "expired"
                 self._ok(r, "access", "access_delete", "pin_conflict")
                 return
             due = r["arrival"] - self.cfg["create_days_before"] * 86400.0
@@ -723,6 +741,8 @@ class Engine:
         """Owner override; empty pin clears the override."""
         with self.lock:
             r = self._get(sid)
+            if r.get("owner"):
+                raise ValueError("owner visits don't get a door PIN")
             if pin in (None, ""):
                 r["pin_override"] = None
                 self.log("%s: PIN override cleared" % self._label(r))
@@ -767,6 +787,7 @@ class Engine:
     def stay_view(self, r, show_pin=True):
         pin, source = self.pin_of(r)
         return {"stay_id": r["id"], "guest": r["guest"],
+                "owner": bool(r.get("owner")),
                 "arrival": self.iso(r["arrival"]),
                 "checkout": self.iso(r["checkout"]),
                 "all_day": r.get("all_day", False),
@@ -804,9 +825,9 @@ class Engine:
                          "access_mode": "enabled" if self.access else
                          "disabled",
                          "modes_enabled": self.modes_enabled}
-                keys = ("stay_id", "guest", "arrival", "checkout", "all_day",
-                        "pin", "pin_source", "access_status", "access_start",
-                        "access_end", "notes", "last_error")
+                keys = ("stay_id", "guest", "owner", "arrival", "checkout",
+                        "all_day", "pin", "pin_source", "access_status",
+                        "access_start", "access_end", "notes", "last_error")
                 if r:
                     v = self.stay_view(r)
                     attrs.update({k: v[k] for k in keys})

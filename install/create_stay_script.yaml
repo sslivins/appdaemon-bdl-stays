@@ -3,13 +3,25 @@
 # calendar.bdl_stays (writing the `pin:` line for you), then clears the form.
 #
 # Helpers (Settings -> Helpers, or WS input_text/create, input_datetime/create):
+#   input_select.bdl_new_stay_type     options Guest, Owner (owner visits get
+#       no door PIN: the stays app writes `type: owner` and skips Access)
 #   input_text.bdl_new_stay_guest      max 100
 #   input_text.bdl_new_stay_pin        max 8, pattern ^(\d{4,8})?$  (blank = auto PIN)
 #   input_text.bdl_new_stay_notes      max 255
 #   input_datetime.bdl_new_stay_arrival   date + time
 #   input_datetime.bdl_new_stay_checkout  date + time
-#   binary_sensor.bdl_new_stay_ready   template helper: guest set, PIN blank or
-#       4-8 digits, checkout > arrival (gates the dashboard's Create button)
+#   binary_sensor.bdl_new_stay_ready   template helper (see READY_TEMPLATE
+#       below; gates the dashboard's Create button)
+#
+# READY_TEMPLATE:
+#   {% set owner = is_state('input_select.bdl_new_stay_type', 'Owner') %}
+#   {% set g = states('input_text.bdl_new_stay_guest') | trim %}
+#   {% set p = states('input_text.bdl_new_stay_pin') | trim %}
+#   {% set a = as_datetime(states('input_datetime.bdl_new_stay_arrival')) %}
+#   {% set c = as_datetime(states('input_datetime.bdl_new_stay_checkout')) %}
+#   {{ (owner or g not in ['', 'unknown', 'unavailable'])
+#      and (owner or p == '' or p is match('^\d{4,8}$'))
+#      and a is not none and c is not none and c > a }}
 #
 # Install: Settings -> Automations & scenes -> Scripts -> new -> Edit in YAML,
 # with script id `bdl_create_stay`.
@@ -18,14 +30,18 @@ icon: mdi:calendar-plus
 mode: single
 sequence:
   - variables:
-      guest: "{{ states('input_text.bdl_new_stay_guest') | trim }}"
-      pin: "{{ states('input_text.bdl_new_stay_pin') | trim }}"
+      owner: "{{ is_state('input_select.bdl_new_stay_type', 'Owner') }}"
+      name: "{{ states('input_text.bdl_new_stay_guest') | trim }}"
+      guest: >-
+        {{ 'Owner visit' if owner and name in ['', 'unknown', 'unavailable']
+           else name }}
+      pin: "{{ '' if owner else states('input_text.bdl_new_stay_pin') | trim }}"
       notes: "{{ states('input_text.bdl_new_stay_notes') | trim }}"
       arrival: "{{ states('input_datetime.bdl_new_stay_arrival') }}"
       checkout: "{{ states('input_datetime.bdl_new_stay_checkout') }}"
   - if:
       - condition: template
-        value_template: "{{ guest in ['', 'unknown', 'unavailable'] }}"
+        value_template: "{{ not owner and guest in ['', 'unknown', 'unavailable'] }}"
     then:
       - stop: Enter the guest name.
         error: true
@@ -51,8 +67,14 @@ sequence:
       start_date_time: "{{ arrival }}"
       end_date_time: "{{ checkout }}"
       description: >-
-        {{ ((['pin: ' ~ pin] if pin else []) + ([notes] if notes else []))
+        {{ ((['type: owner'] if owner else [])
+            + (['pin: ' ~ pin] if pin else []) + ([notes] if notes else []))
            | join('\n') }}
+  - action: input_select.select_option
+    target:
+      entity_id: input_select.bdl_new_stay_type
+    data:
+      option: Guest
   - action: input_text.set_value
     target:
       entity_id:

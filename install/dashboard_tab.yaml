@@ -27,8 +27,12 @@ sections:
 
           - **Arrival:** {{ as_timestamp(state_attr(s, 'arrival')) | timestamp_custom(f) }}
           - **Checkout:** {{ as_timestamp(state_attr(s, 'checkout')) | timestamp_custom(f) }}
+          {%- if state_attr(s, 'owner') %}
+          - **Owner visit:** no door PIN; the hub signs itself in
+          {%- else %}
           - **Door PIN:** {{ state_attr(s, 'pin') or '—' }} ({{ state_attr(s, 'pin_source') }})
           - **Door access:** {{ state_attr(s, 'access_status') }}, {{ as_timestamp(state_attr(s, 'access_start')) | timestamp_custom(f) }} → {{ as_timestamp(state_attr(s, 'access_end')) | timestamp_custom(f) }}
+          {%- endif %}
           {%- if state_attr(s, 'notes') %}
           - **Notes:** {{ state_attr(s, 'notes') }}
           {%- endif %}
@@ -51,8 +55,12 @@ sections:
 
           - **Arrival:** {{ as_timestamp(state_attr(s, 'arrival')) | timestamp_custom(f) }} (in {{ time_until(as_datetime(state_attr(s, 'arrival'))) }})
           - **Checkout:** {{ as_timestamp(state_attr(s, 'checkout')) | timestamp_custom(f) }}
+          {%- if state_attr(s, 'owner') %}
+          - **Owner visit:** no door PIN; the hub signs itself in
+          {%- else %}
           - **Door PIN:** {{ state_attr(s, 'pin') or '—' }} ({{ state_attr(s, 'pin_source') }})
           - **Door access:** {{ state_attr(s, 'access_status') }}, {{ as_timestamp(state_attr(s, 'access_start')) | timestamp_custom(f) }} → {{ as_timestamp(state_attr(s, 'access_end')) | timestamp_custom(f) }}
+          {%- endif %}
           {%- if state_attr(s, 'notes') %}
           - **Notes:** {{ state_attr(s, 'notes') }}
           {%- endif %}
@@ -88,8 +96,11 @@ sections:
         show_header_toggle: false
         state_color: false
         entities:
+          - entity: input_select.bdl_new_stay_type
+            name: Stay type
+            icon: mdi:account-question
           - entity: input_text.bdl_new_stay_guest
-            name: Guest name
+            name: Guest name (optional for owner visits)
             icon: mdi:account
           - entity: input_datetime.bdl_new_stay_arrival
             name: Arrival
@@ -97,9 +108,14 @@ sections:
           - entity: input_datetime.bdl_new_stay_checkout
             name: Checkout
             icon: mdi:car-arrow-left
-          - entity: input_text.bdl_new_stay_pin
-            name: Door PIN (blank = automatic)
-            icon: mdi:dialpad
+          - type: conditional
+            conditions:
+              - entity: input_select.bdl_new_stay_type
+                state: Guest
+            row:
+              entity: input_text.bdl_new_stay_pin
+              name: Door PIN (blank = automatic)
+              icon: mdi:dialpad
           - entity: input_text.bdl_new_stay_notes
             name: Notes (optional)
             icon: mdi:note-text-outline
@@ -129,12 +145,13 @@ sections:
         card:
           type: markdown
           content: >-
+            {% set owner = is_state('input_select.bdl_new_stay_type', 'Owner') %}
             {% set g = states('input_text.bdl_new_stay_guest') | trim %}
             {% set p = states('input_text.bdl_new_stay_pin') | trim %}
             {% set a = as_datetime(states('input_datetime.bdl_new_stay_arrival')) %}
             {% set c = as_datetime(states('input_datetime.bdl_new_stay_checkout')) %}
-            {% if g in ['', 'unknown', 'unavailable'] %}Enter the guest name.
-            {% elif p != '' and not (p is match('^\d{4,8}$')) %}The PIN must be 4–8 digits (or blank for an automatic one).
+            {% if not owner and g in ['', 'unknown', 'unavailable'] %}Enter the guest name.
+            {% elif not owner and p != '' and not (p is match('^\d{4,8}$')) %}The PIN must be 4–8 digits (or blank for an automatic one).
             {% elif a is none or c is none or c <= a %}Checkout must be after arrival.
             {% endif %}
       - type: heading
@@ -145,7 +162,8 @@ sections:
           To change or cancel a stay, click it in the calendar below. Stays
           can also be added there directly: title = guest name, all-day
           events arrive 4 PM / leave 11 AM, optional description line
-          `pin: 4821` (4–8 digits); other lines are notes.
+          `pin: 4821` (4–8 digits), or `type: owner` for an owner visit
+          (no door PIN); other lines are notes.
       - type: calendar
         initial_view: dayGridMonth
         entities:
