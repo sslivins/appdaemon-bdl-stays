@@ -427,10 +427,6 @@ class Engine:
                 r["removed"] = True
                 r["removed_at"] = now
                 self.log("stay %s removed from the calendar" % self._label(r))
-                p = (r.get("modes") or {}).get("preheat")
-                if p and not p.get("dry") and r["arrival"] > now:
-                    self._fail(r, "preheat_orphan", "stay was removed but a "
-                               "preheat was requested for it; check bdl_modes")
 
     # --------------------------------------------------------------- access
     def _visitor_fields(self, r, resources):
@@ -531,7 +527,51 @@ class Engine:
     def _counts(self, rec):
         return bool(rec) and (not rec.get("dry") or not self.modes_enabled)
 
+    def _withdraw_preheat(self, r, occupied=False):
+        """A removed stay's preheat: cancel it if nothing has run yet, or
+        send vacation to undo a ramp already under way (unless another stay
+        is in the lodge). Only the bdl_modes operation this app started is
+        touched."""
+        p = r["modes"].get("preheat")
+        if not p or not p.get("owned") or p.get("withdrawn") or \
+                not self._counts(p) or not self.modes_enabled or \
+                self.modes is None:
+            return
+        label = self._label(r)
+        try:
+            act = (self.modes.status() or {}).get("active") or {}
+            if act.get("id") != p.get("op_id") or \
+                    act.get("status") in FINAL_OPS:
+                p["withdrawn"] = "inactive"
+                self.log("%s: removed; its preheat is no longer active" %
+                         label)
+                self._ok(r, "preheat_orphan")
+                return
+            started = any(g.get("status") in ("running", "retrying", "done",
+                                              "failed")
+                          for g in act.get("groups") or [])
+            if started and not occupied:
+                self.modes.command("vacation",
+                                   request_id="bdl_stays:withdraw:%s:%d" %
+                                   (r["id"], p["arrival"]))
+                p["withdrawn"] = "vacation"
+            else:
+                self.modes.command("cancel")
+                p["withdrawn"] = "cancel"
+        except Exception as exc:  # noqa: BLE001
+            self._fail(r, "preheat_orphan", "stay was removed but its "
+                       "preheat could not be withdrawn: %s" % exc)
+            return
+        self._ok(r, "preheat_orphan")
+        self.log("%s: removed; bdl_modes %s (preheat withdrawn)" % (
+            label, p["withdrawn"]))
+
     def _modes_pass(self, now):
+        occupied = any(r["arrival"] <= now < r["checkout"]
+                       for r in self.stays.values() if not r.get("removed"))
+        for r in self.stays.values():
+            if r.get("removed"):
+                self._withdraw_preheat(r, occupied)
         live = [r for r in self.stays.values() if not r.get("removed")]
         current = [r for r in live if r["arrival"] <= now < r["checkout"]]
         delay = self.cfg["vacation_delay_h"] * H
@@ -599,10 +639,10 @@ class Engine:
         n["modes"].pop("preheat_wait", None)
         self._modes_call(n, "preheat", "preheat", n["arrival"], now)
 
-    def _record(self, r, key, result, ref, now, dry=False):
-        r["modes"][key] = {"result": result, "at": now, "dry": dry,
-                           ("checkout" if key == "vacation" else "arrival"):
-                           ref}
+    def _record(self, r, key, result, ref, now, dry=False, **extra):
+        r["modes"][key] = dict({"result": result, "at": now, "dry": dry,
+                                ("checkout" if key == "vacation"
+                                 else "arrival"): ref}, **extra)
 
     def _modes_call(self, r, key, cmd, ref, now, request_id=None):
         """Send (or, when disabled, log) a bdl_modes request. -> True if it
@@ -614,30 +654,47 @@ class Engine:
                 if key == "preheat" else ""))
             self._record(r, key, "would_" + cmd, ref, now, dry=True)
             return True
+        extra = {}
         try:
             if key == "preheat":
+                prev = r["modes"].get("preheat")
+                prev_op = prev.get("op_id") if self._counts(prev) else None
+                owned = bool(prev_op and prev.get("owned"))
                 act = (self.modes.status() or {}).get("active") or {}
-                if act.get("kind") == "preheat" and \
-                        act.get("status") not in FINAL_OPS:
+                live = act.get("kind") == "preheat" and \
+                    act.get("status") not in FINAL_OPS
+                if prev_op and (act.get("id") != prev_op or not live):
+                    # Cancelled, finished or replaced outside this app:
+                    # don't fight a manual change.
+                    result = "overridden"
+                    extra = {"op_id": prev_op, "owned": False}
+                    self.log("%s: preheat was changed outside the stays "
+                             "app; not following the new arrival" % label)
+                elif live:
                     if abs((act.get("arrival") or 0) - ref) < 60:
                         result = "already"
                     else:
                         self.modes.command("update_arrival",
                                            arrival=self.iso(ref))
                         result = "update_arrival"
+                    extra = {"op_id": act.get("id"), "owned": owned}
                 else:
-                    self.modes.command(
+                    res = self.modes.command(
                         "preheat", arrival=self.iso(ref),
                         request_id="bdl_stays:preheat:%s:%d" % (r["id"],
                                                                 ref))
                     result = "preheat"
+                    extra = {"op_id": ((res or {}).get("active") or {})
+                             .get("id"), "owned": True}
             else:
                 self.modes.command(cmd, request_id=request_id)
                 result = "sent"
         except Exception as exc:  # noqa: BLE001
             self._fail(r, key, "bdl_modes %s failed: %s" % (cmd, exc))
             return False
-        self._record(r, key, result, ref, now)
+        self._record(r, key, result, ref, now, **extra)
+        if result == "overridden":
+            return True
         self._ok(r, key)
         self.log("%s: bdl_modes %s (%s)" % (label, cmd, result))
         return True

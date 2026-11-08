@@ -115,15 +115,22 @@ class FakeModes:
         if self.fail:
             raise bs_engine.ModesError(self.fail)
         self.cmds.append((cmd, data))
+        self.n = getattr(self, "n", 0) + 1
         if cmd == "preheat":
-            self.active = {"kind": "preheat", "status": "scheduled",
+            self.active = {"id": "op%d" % self.n, "kind": "preheat",
+                           "status": "scheduled",
+                           "groups": [{"status": "pending"},
+                                      {"status": "pending"}],
                            "arrival": dt.datetime.fromisoformat(
                                data["arrival"]).timestamp()}
         elif cmd == "update_arrival":
             self.active["arrival"] = dt.datetime.fromisoformat(
                 data["arrival"]).timestamp()
+        elif cmd == "cancel":
+            self.active["status"] = "cancelled"
         else:
-            self.active = {"kind": cmd, "status": "running"}
+            self.active = {"id": "op%d" % self.n, "kind": cmd,
+                           "status": "running"}
         return {"active": self.active}
 
 
@@ -645,6 +652,56 @@ class ModesTests(Base):
         self.sync([], at=ts(12, 2, 2))
         self.sync([], at=ts(12, 3, 12))
         self.assertEqual(self.modes.cmds, [])
+
+    def _preheated(self):
+        evs = [ev("A", L(12, 3, 16), L(12, 5, 11))]
+        self.sync(evs, at=ts(12, 2))
+        self.assertEqual([c for c, _ in self.modes.cmds], ["preheat"])
+        return evs
+
+    def _remove(self, *at):
+        self.sync([], at=ts(*at))
+        self.sync([], at=ts(*at, 1))        # removal_confirmations
+
+    def test_removed_stay_cancels_unstarted_preheat(self):
+        self._preheated()
+        self._remove(12, 2, 1)
+        self.assertEqual([c for c, _ in self.modes.cmds],
+                         ["preheat", "cancel"])
+        self.assertEqual(self.notes, [])
+        self.sync([], at=ts(12, 2, 3))
+        self.assertEqual(len(self.modes.cmds), 2)
+
+    def test_removed_stay_reverts_started_preheat(self):
+        self._preheated()
+        self.modes.active["groups"][0]["status"] = "done"
+        self._remove(12, 2, 1)
+        self.assertEqual(self.modes.cmds[-1], ("vacation", {
+            "request_id": "bdl_stays:withdraw:u1:%d" % ts(12, 3, 16)}))
+
+    def test_removed_stay_leaves_foreign_operation(self):
+        self._preheated()
+        self.modes.active = {"id": "manual", "kind": "preheat",
+                             "status": "scheduled", "arrival": ts(12, 3, 16)}
+        self._remove(12, 2, 1)
+        self.assertEqual([c for c, _ in self.modes.cmds], ["preheat"])
+
+    def test_adopted_preheat_is_not_cancelled(self):
+        self.modes.active = {"id": "manual", "kind": "preheat",
+                             "status": "scheduled", "arrival": ts(12, 3, 16)}
+        self.sync([ev("A", L(12, 3, 16), L(12, 5, 11))], at=ts(12, 2))
+        self._remove(12, 2, 1)
+        self.assertEqual(self.modes.cmds, [])
+
+    def test_manual_change_is_not_overridden(self):
+        self._preheated()
+        self.modes.active["status"] = "cancelled"      # owner cancelled it
+        self.sync([ev("A", L(12, 3, 19), L(12, 5, 11))], at=ts(12, 2, 1))
+        self.assertEqual([c for c, _ in self.modes.cmds], ["preheat"])
+        self.assertEqual(self.stay()["modes"]["preheat"]["result"],
+                         "overridden")
+        self.sync([ev("A", L(12, 3, 19), L(12, 5, 11))], at=ts(12, 2, 2))
+        self.assertEqual(len(self.modes.cmds), 1)
 
 
 if __name__ == "__main__":
